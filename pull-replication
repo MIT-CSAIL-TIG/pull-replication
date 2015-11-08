@@ -1,0 +1,36 @@
+#!/bin/sh -e
+PATH=$(command -p getconf PATH):/usr/sbin:/sbin:/usr/local/bin:/usr/local/sbin
+export PATH
+
+remote_host=server1.example
+remote_parent_ds=example_remote
+local_parent_ds=example_local
+datasets="foo bar baz quux"
+
+for ds in $datasets; do
+	rlist=$(mktemp $HOME/${remote_host}:${ds}.XXXXXX)
+	llist=$(mktemp $HOME/localhost:${ds}.XXXXXX)
+	trap "rm ${rlist} ${llist}" 0 1 3 15
+	ssh root@$remote_host \
+		zfs list -Hp -d 1 -t snapshot -o creation,name ${remote_parent_ds}/${ds} | \
+		sed -e "s,${remote_parent_ds}/${ds}@,," | sort > ${rlist}
+	zfs list -Hp -d 1 -t snapshot -o creation,name ${local_parent_ds}/${ds} | \
+		sed -e "s,${local_parent_ds}/${ds}@,," | sort > ${llist}
+
+	# XXX the following assumes that "zfs list" will output the creation
+	# dates with the same number of digits for all cases.
+
+	# Find the most recent common snapshot
+	common=$(comm -12 $llist $rlist | tail -1 | awk '{print $2}')
+
+	# Find the newest snapshot
+	newest=$(comm -13 $llist $rlist | tail -1 | awk '{print $2}')
+
+	rm ${rlist} ${llist}
+	trap - 0 1 3 15
+	echo "Dumping from ${remote_parent_ds}/${ds}@${common} to ${remote_parent_ds}/${ds}@$newest"
+	ssh root@$remote_host \
+		zfs send -R -I @$common ${remote_parent_ds}/${ds}@$newest | \
+		sudo zfs recv -v -F -e ${local_parent_ds}
+done
+
