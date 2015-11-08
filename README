@@ -1,0 +1,2 @@
+This is a simple shell script I wrote to do ZFS filesystem replication
+over SSH in "pull" style.  I'll explain more later.
