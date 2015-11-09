@@ -42,3 +42,8 @@ ones that were created on the source.  (This is inherent in the
 concept of "replication", but it's also a formal requirement of the
 way we compute which snapshots the two systems have in common.)
 
+The comm(1) utility requires that its input files be sorted as strings.
+This will cause the script to fail messily when time_t overflows 10
+digits, or if somehow you have a ZFS dataset with a snapshot whose
+creation date is prior to September 8, 2001.
+
