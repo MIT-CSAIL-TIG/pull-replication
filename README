@@ -1,2 +1,44 @@
 This is a simple shell script I wrote to do ZFS filesystem replication
-over SSH in "pull" style.  I'll explain more later.
+over SSH in "pull" style.
+
+Motivation:
+
+Normally, when we replicate ZFS datasets from one machine to another,
+we do it "push" style, with the source machine taking regular
+snapshots and running a script that runs a zfs send | zfs receive
+pipeline where the receive side is run over ssh to a remote machine.
+However, this assumes a great deal of trust: in order for this to
+work, the source machine must have root access to the receiver.
+(Standard ZFS delegated administration doesn't work because the source
+can change properties that would require mounts or exports to change
+on the recipient system.)  Additionally, the people who operate the
+remote server wanted a different snapshot schedule from what we
+normally use.  We didn't want to give them root on our file servers,
+but we have root on their machine, so I created this script that runs
+on our server to pull the snapshots over from the source system.
+Doing it this way is *not* ironclad secure: there are things they
+could do on the remote server which would give them effective root
+access to our server, but it's better than the alternative.
+
+Principle of operation:
+
+This script assumes that it can ssh as root to the source server
+(using public-key authentication, presumably, although GSSAPI should
+also work -- public-key was simplest to get going), but it doesn't
+need to run directly as root on the target; it uses sudo to run the
+zfs receive command.  It runs two commands on the source system for
+each dataset to be synchronized: first, it does a "zfs list" to get a
+list of snapshots on the source, which is used to determine both the
+absolute most recent source snapshot and the most recent snapshot in
+common between the source and recipient systems; then it does a "zfs
+send" on the source to generate a replication stream with the
+differences between the two snapshots.
+
+Caveats:
+
+Obviously, any automatic snapshot creation procedure on the recipient
+system must be disabled, so that the only snapshots to exist are the
+ones that were created on the source.  (This is inherent in the
+concept of "replication", but it's also a formal requirement of the
+way we compute which snapshots the two systems have in common.)
+
